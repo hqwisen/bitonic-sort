@@ -1,4 +1,4 @@
-# bitonic
+# bitonicv1
 
 Each seq to sort have a length of n = 2k
 
@@ -17,10 +17,11 @@ r = 3 -> (7, 8)
 level = rank + (rank % 2)
 k = n / level
 
-# Improvements that we can make
+## Improvements that we can make
 
 the master node is useless during the sorting
 
+# bitonicv2
 
 # Interesting links
 
