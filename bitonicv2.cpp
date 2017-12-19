@@ -7,7 +7,7 @@
 #define INFO  20
 #define ERROR 30
 #define OFF 50
-#define LOG_LEVEL DEBUG
+#define LOG_LEVEL OFF
 
 using namespace std;
 
@@ -44,34 +44,6 @@ string arr_str(const int a[], int size){
 }
 
 
-void send_cmp(int A[], int cnodes, int k){
-  int cmpbuf[2];
-  for(int i=0; i < cnodes; i++){
-    cmpbuf[0] = A[i];
-    cmpbuf[1] = A[k+i];
-    MPI_Send(cmpbuf, 2, MPI_INT, i+1 , 0, MPI_COMM_WORLD);
-  }
-
-
-  for(int l=0; l < cnodes / k; l++){
-    for(int i=0; i < k; i++){
-      index = (l * h) + i;
-    }
-  }
-}
-
-void recv_cmp(int A[], int k, int rec_lvl){
-  MPI_Status status;
-  int cmpbuf[2];
-  for(int i=0; i < k; i++){
-    for(int r=0; r < rec_lvl; r++){
-      MPI_Recv(cmpbuf, 2, MPI_INT, i+1, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
-      A[i + k*r] = cmpbuf[0];
-      A[k+(i+k*r)] = cmpbuf[1];
-    }
-  }
-}
-
 int main( int argc, char **argv) {
 
   int rank, nb_instance;
@@ -87,34 +59,55 @@ int main( int argc, char **argv) {
 		if(rank == 0){
       log(INFO, "Running bitonic sort with 2k=" + to_string(n));
       int A[n] = {14, 16, 15, 11, 9, 8, 7, 5, 4, 2, 1, 3, 6, 10, 12, 13};
+      // TODO make sure that A is bitonic
       log(INFO, "Starting bitonic sort on " + arr_str(A, n));
       int cmpbuf[2];
-      int rec_lvl = 1;
-      int k = n / 2;
-      while(k != 2){
-        log(INFO, "Sending with (k=" + to_string(k)
-                                + ", rec_lvl=" + to_string(rec_lvl) + ")");
-        send_cmp(A, k, rec_lvl);
-        recv_cmp(A, k, rec_lvl);
+      int k = n;
+      int offset, cnode;
+      int indices[cnodes];
+      for(int i=0; i < 4; i++){ // FIXME use log2 n
         k = k / 2;
-        rec_lvl++;
-        log(INFO, "Recv: " + arr_str(A, n));
+        offset = 0;
+        cnode = 1;
+        for (int b=0; b < n/(k*2); b++){
+          for(int t=0; t < k; t++){
+            indices[cnode] = offset + t;
+            cmpbuf[0] = A[offset + t];
+            cmpbuf[1] = A[offset + t + k];
+            log(INFO, "Sending " + arr_str(cmpbuf, 2) + " to " + to_string(cnode));
+            MPI_Send(cmpbuf, 2, MPI_INT, cnode, 0, MPI_COMM_WORLD);
+            cnode++;
+          }
+          log(INFO, "A=" + arr_str(A, n));
+          offset += k*2;
+        }
+        for(int c=1; c < cnodes+1 ; c++){
+          MPI_Recv(cmpbuf, 2, MPI_INT, c, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+          log(INFO, "Master recieved from " + to_string(c) + ": " + arr_str(cmpbuf, 2));
+          A[indices[c]] = cmpbuf[0];
+          A[indices[c] + k] = cmpbuf[1];
+        }
+
       }
+
+      cout<<"Final result: "<<arr_str(A, n)<<endl;
 
     }else{
       // Computing nodes only compare
       int buf[2];
-      MPI_Recv(buf, 2, MPI_INT, 0, MPI_ANY_TAG,
-                MPI_COMM_WORLD, &status);
-      log(INFO, " Node #" + to_string(rank) + ": " + arr_str(buf, 2)
-                + " → ", false);
-      if(buf[0] > buf[1]){
-        int tmp = buf[0];
-        buf[0] = buf[1];
-        buf[1] = tmp;
+      for(int i=0; i < 4; i++){ // FIXME use log2 n
+        MPI_Recv(buf, 2, MPI_INT, 0, MPI_ANY_TAG,
+                  MPI_COMM_WORLD, &status);
+        log(INFO, " Node #" + to_string(rank) + ": " + arr_str(buf, 2)
+                  + " → ", false);
+        if(buf[0] > buf[1]){
+          int tmp = buf[0];
+          buf[0] = buf[1];
+          buf[1] = tmp;
+        }
+        log(INFO, arr_str(buf, 2), true, false);
+        MPI_Send(buf, 2, MPI_INT, 0, 0, MPI_COMM_WORLD);
       }
-      log(INFO, arr_str(buf, 2), true, false);
-      MPI_Send(buf, 2, MPI_INT, 0, 0, MPI_COMM_WORLD);
     }
 	}
 
